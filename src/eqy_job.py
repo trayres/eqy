@@ -1,4 +1,5 @@
 import os, sys
+
 if os.name == "posix":
     import resource, fcntl
 import subprocess, signal
@@ -10,11 +11,13 @@ import click
 possible_statuses = ["PASS", "FAIL", "UNKNOWN", "ERROR", "TIMEOUT"]
 all_tasks_running = []
 
+
 def force_shutdown(signum, frame):
     click.echo("EQY ---- Keyboard interrupt or external termination signal ----")
     for task in list(all_tasks_running):
         task.terminate()
     sys.exit(1)
+
 
 if os.name == "posix":
     signal.signal(signal.SIGHUP, force_shutdown)
@@ -24,13 +27,16 @@ signal.signal(signal.SIGTERM, force_shutdown)
 # def process_filename(filename):
 #     if filename.startswith("~/"):
 #         filename = os.environ['HOME'] + filename[1:]
-# 
+#
 #     filename = os.path.expandvars(filename)
-# 
+#
 #     return filename
 
+
 class EqyTask:
-    def __init__(self, job, info, deps, cmdline, logfile=None, logstderr=True, silent=False):
+    def __init__(
+        self, job, info, deps, cmdline, logfile=None, logstderr=True, silent=False
+    ):
         self.running = False
         self.finished = False
         self.terminated = False
@@ -40,13 +46,13 @@ class EqyTask:
         self.deps = deps
         if os.name == "posix":
             self.cmdline = cmdline
-        else: # pragma: no cover
+        else:  # pragma: no cover
             # Windows command interpreter equivalents for sequential
             # commands (; => &) command grouping ({} => ()).
             replacements = {
-                ";" : "&",
-                "{" : "(",
-                "}" : ")",
+                ";": "&",
+                "{": "(",
+                "}": ")",
             }
 
             cmdline_copy = cmdline
@@ -75,7 +81,9 @@ class EqyTask:
             self.notify.append(next_task)
 
     def log(self, line):
-        if line is not None and (self.noprintregex is None or not self.noprintregex.match(line)):
+        if line is not None and (
+            self.noprintregex is None or not self.noprintregex.match(line)
+        ):
             if self.logfile is not None:
                 click.echo(line, file=self.logfile)
             if line.startswith("Warning:"):
@@ -84,8 +92,9 @@ class EqyTask:
                 line = click.style(line, fg="red", bold=True)
             elif line.startswith("Proved equivalence "):
                 line = click.style(line, fg="green")
-            elif line.startswith("Could not prove equivalence ") or \
-                 line.startswith("Setting unknown status for partition "):
+            elif line.startswith("Could not prove equivalence ") or line.startswith(
+                "Setting unknown status for partition "
+            ):
                 line = click.style(line, fg="yellow")
             elif line.startswith("Proved inequivalence "):
                 line = click.style(line, fg="red")
@@ -109,11 +118,15 @@ class EqyTask:
     def terminate(self, timeout=False):
         if self.running:
             if not self.silent:
-                self.job.log("{}: terminating process".format(click.style(self.info, fg="magenta")))
+                self.job.log(
+                    "{}: terminating process".format(
+                        click.style(self.info, fg="magenta")
+                    )
+                )
             if os.name == "posix":
                 try:
                     os.killpg(self.p.pid, signal.SIGTERM)
-                except PermissionError: # pragma: no cover
+                except PermissionError:  # pragma: no cover
                     pass
             self.p.terminate()
             self.job.tasks_running.remove(self)
@@ -130,22 +143,37 @@ class EqyTask:
                     return
 
             if not self.silent:
-                self.job.log("{}: starting process \"{}\"".format(click.style(self.info, fg="magenta"), self.cmdline))
+                self.job.log(
+                    '{}: starting process "{}"'.format(
+                        click.style(self.info, fg="magenta"), self.cmdline
+                    )
+                )
 
             if os.name == "posix":
-                def preexec_fn(): # pragma: no cover
+
+                def preexec_fn():  # pragma: no cover
                     signal.signal(signal.SIGINT, signal.SIG_IGN)
                     os.setpgrp()
 
-                self.p = subprocess.Popen(["/usr/bin/env", "bash", "-c", self.cmdline], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                        stderr=(subprocess.STDOUT if self.logstderr else None), preexec_fn=preexec_fn)
+                self.p = subprocess.Popen(
+                    ["bash", "-c", self.cmdline],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=(subprocess.STDOUT if self.logstderr else None),
+                    preexec_fn=preexec_fn,
+                )
 
                 fl = fcntl.fcntl(self.p.stdout, fcntl.F_GETFL)
                 fcntl.fcntl(self.p.stdout, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-            else: # pragma: no cover
-                self.p = subprocess.Popen(self.cmdline, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                        stderr=(subprocess.STDOUT if self.logstderr else None))
+            else:  # pragma: no cover
+                self.p = subprocess.Popen(
+                    self.cmdline,
+                    shell=True,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=(subprocess.STDOUT if self.logstderr else None),
+                )
 
             self.job.tasks_pending.remove(self)
             self.job.tasks_running.append(self)
@@ -160,7 +188,11 @@ class EqyTask:
             self.read_output()
 
             if not self.silent:
-                self.job.log("{}: finished (returncode={})".format(click.style(self.info, fg="magenta"), self.p.returncode))
+                self.job.log(
+                    "{}: finished (returncode={})".format(
+                        click.style(self.info, fg="magenta"), self.p.returncode
+                    )
+                )
             self.job.tasks_running.remove(self)
             all_tasks_running.remove(self)
             self.running = False
@@ -168,7 +200,11 @@ class EqyTask:
             if self.p.returncode == 127:
                 self.job.status = "ERROR"
                 if not self.silent:
-                    self.job.log("{}: COMMAND NOT FOUND. ERROR.".format(click.style(self.info, fg="magenta")))
+                    self.job.log(
+                        "{}: COMMAND NOT FOUND. ERROR.".format(
+                            click.style(self.info, fg="magenta")
+                        )
+                    )
                 self.terminated = True
                 self.job.terminate()
                 return
@@ -178,7 +214,11 @@ class EqyTask:
             if self.checkretcode and self.p.returncode != 0:
                 self.job.status = "ERROR"
                 if not self.silent:
-                    self.job.log("{}: job failed. ERROR.".format(click.style(self.info, fg="magenta")))
+                    self.job.log(
+                        "{}: job failed. ERROR.".format(
+                            click.style(self.info, fg="magenta")
+                        )
+                    )
                 self.terminated = True
                 self.job.terminate()
                 return
@@ -191,8 +231,9 @@ class EqyTask:
     def read_output(self):
         while True:
             outs = self.p.stdout.readline().decode("utf-8")
-            if len(outs) == 0: break
-            if outs[-1] != '\n':
+            if len(outs) == 0:
+                break
+            if outs[-1] != "\n":
                 self.linebuffer += outs
                 break
             outs = (self.linebuffer + outs).strip()
@@ -206,7 +247,7 @@ class EqyAbort(BaseException):
 
 class EqyJob:
     # def __init__(self, sbyconfig, workdir, early_logs, reusedir):
-    def __init__(self, args, cfg): #, early_logs, timeout=None):
+    def __init__(self, args, cfg):  # , early_logs, timeout=None):
         self.args = args
         self.cfg = cfg
         # self.options = dict()
@@ -220,7 +261,7 @@ class EqyJob:
         # self.reusedir = reusedir
         self.status = "UNKNOWN"
         self.total_time = 0
-        #self.timeout = timeout
+        # self.timeout = timeout
         self.expect = ["PASS"]
 
         self.exe_paths = args.exe_paths
@@ -259,9 +300,9 @@ class EqyJob:
             if os.name == "posix":
                 try:
                     select(fds, [], [], 1.0) == ([], [], [])
-                except InterruptedError: # pragma: no cover
+                except InterruptedError:  # pragma: no cover
                     pass
-            else: # pragma: no cover
+            else:  # pragma: no cover
                 sleep(0.1)
 
             for task in self.tasks_running:
@@ -279,12 +320,17 @@ class EqyJob:
 
     def dress_message(self, logmessage):
         tm = localtime()
-        return " ".join([
-            click.style("EQY", fg="blue"),
-            click.style("{:2d}:{:02d}:{:02d}".format(tm.tm_hour, tm.tm_min, tm.tm_sec), fg="green"),
-            "[" + click.style(self.workdir, fg="blue") + "]",
-            logmessage
-        ])
+        return " ".join(
+            [
+                click.style("EQY", fg="blue"),
+                click.style(
+                    "{:2d}:{:02d}:{:02d}".format(tm.tm_hour, tm.tm_min, tm.tm_sec),
+                    fg="green",
+                ),
+                "[" + click.style(self.workdir, fg="blue") + "]",
+                logmessage,
+            ]
+        )
 
     def log(self, logmessage):
         text = self.dress_message(logmessage)
@@ -292,7 +338,9 @@ class EqyJob:
         click.echo(text, file=self.logfile)
 
     def warning(self, logmessage):
-        text = self.dress_message(click.style("Warning: " + logmessage, fg="yellow", bold=True))
+        text = self.dress_message(
+            click.style("Warning: " + logmessage, fg="yellow", bold=True)
+        )
         click.echo(text)
         click.echo(text, file=self.logfile)
 
@@ -507,165 +555,165 @@ class EqyJob:
             assert 0
 
     def run(self):
-    # def run(self, setupmode):
-    #     mode = None
-    #     key = None
-    #
-    #     with open("{}/config.sby".format(self.workdir), "r") as f:
-    #         for line in f:
-    #             raw_line = line
-    #             if mode in ["options", "engines", "files"]:
-    #                 line = re.sub(r"\s*(\s#.*)?$", "", line)
-    #                 if line == "" or line[0] == "#":
-    #                     continue
-    #             else:
-    #                 line = line.rstrip()
-    #             # print(line)
-    #             if mode is None and (len(line) == 0 or line[0] == "#"):
-    #                 continue
-    #             match = re.match(r"^\s*\[(.*)\]\s*$", line)
-    #             if match:
-    #                 entries = match.group(1).split()
-    #                 if len(entries) == 0:
-    #                     self.error("sby file syntax error: {}".format(line))
-    #
-    #                 if entries[0] == "options":
-    #                     mode = "options"
-    #                     if len(self.options) != 0 or len(entries) != 1:
-    #                         self.error("sby file syntax error: {}".format(line))
-    #                     continue
-    #
-    #                 if entries[0] == "engines":
-    #                     mode = "engines"
-    #                     if len(self.engines) != 0 or len(entries) != 1:
-    #                         self.error("sby file syntax error: {}".format(line))
-    #                     continue
-    #
-    #                 if entries[0] == "script":
-    #                     mode = "script"
-    #                     if len(self.script) != 0 or len(entries) != 1:
-    #                         self.error("sby file syntax error: {}".format(line))
-    #                     continue
-    #
-    #                 if entries[0] == "file":
-    #                     mode = "file"
-    #                     if len(entries) != 2:
-    #                         self.error("sby file syntax error: {}".format(line))
-    #                     current_verbatim_file = entries[1]
-    #                     if current_verbatim_file in self.verbatim_files:
-    #                         self.error("duplicate file: {}".format(entries[1]))
-    #                     self.verbatim_files[current_verbatim_file] = list()
-    #                     continue
-    #
-    #                 if entries[0] == "files":
-    #                     mode = "files"
-    #                     if len(entries) != 1:
-    #                         self.error("sby file syntax error: {}".format(line))
-    #                     continue
-    #
-    #                 self.error("sby file syntax error: {}".format(line))
-    #
-    #             if mode == "options":
-    #                 entries = line.split()
-    #                 if len(entries) != 2:
-    #                     self.error("sby file syntax error: {}".format(line))
-    #                 self.options[entries[0]] = entries[1]
-    #                 continue
-    #
-    #             if mode == "engines":
-    #                 entries = line.split()
-    #                 self.engines.append(entries)
-    #                 continue
-    #
-    #             if mode == "script":
-    #                 self.script.append(line)
-    #                 continue
-    #
-    #             if mode == "files":
-    #                 entries = line.split()
-    #                 if len(entries) == 1:
-    #                     self.files[os.path.basename(entries[0])] = entries[0]
-    #                 elif len(entries) == 2:
-    #                     self.files[entries[0]] = entries[1]
-    #                 else:
-    #                     self.error("sby file syntax error: {}".format(line))
-    #                 continue
-    #
-    #             if mode == "file":
-    #                 self.verbatim_files[current_verbatim_file].append(raw_line)
-    #                 continue
-    #
-    #             self.error("sby file syntax error: {}".format(line))
-    #
-    #     self.handle_str_option("mode", None)
-    #
-    #     if self.opt_mode not in ["bmc", "prove", "cover", "live"]:
-    #         self.error("Invalid mode: {}".format(self.opt_mode))
-    #
-    #     self.expect = ["PASS"]
-    #     if "expect" in self.options:
-    #         self.expect = self.options["expect"].upper().split(",")
-    #         self.used_options.add("expect")
-    #
-    #     for s in self.expect:
-    #         if s not in ["PASS", "FAIL", "UNKNOWN", "ERROR", "TIMEOUT"]:
-    #             self.error("Invalid expect value: {}".format(s))
-    #
-    #     self.handle_bool_option("multiclock", False)
-    #     self.handle_bool_option("wait", False)
-    #     self.handle_int_option("timeout", None)
-    #
-    #     self.handle_str_option("smtc", None)
-    #     self.handle_int_option("skip", None)
-    #     self.handle_str_option("tbtop", None)
-    #
-    #     if self.opt_smtc is not None:
-    #         for engine in self.engines:
-    #             if engine[0] != "smtbmc":
-    #                 self.error("Option smtc is only valid for smtbmc engine.")
-    #
-    #     if self.opt_skip is not None:
-    #         if self.opt_skip == 0:
-    #             self.opt_skip = None
-    #         else:
-    #             for engine in self.engines:
-    #                 if engine[0] not in ["smtbmc", "btor"]:
-    #                     self.error("Option skip is only valid for smtbmc and btor engines.")
-    #
-    #     if len(self.engines) == 0:
-    #         self.error("Config file is lacking engine configuration.")
-    #
-    #     if self.reusedir:
-    #         rmtree("{}/model".format(self.workdir), ignore_errors=True)
-    #     else:
-    #         self.copy_src()
-    #
-    #     if setupmode:
-    #         self.retcode = 0
-    #         return
-    #
-    #     if self.opt_mode == "bmc":
-    #         import sby_mode_bmc
-    #         sby_mode_bmc.run(self)
-    #
-    #     elif self.opt_mode == "prove":
-    #         import sby_mode_prove
-    #         sby_mode_prove.run(self)
-    #
-    #     elif self.opt_mode == "live":
-    #         import sby_mode_live
-    #         sby_mode_live.run(self)
-    #
-    #     elif self.opt_mode == "cover":
-    #         import sby_mode_cover
-    #         sby_mode_cover.run(self)
-    #
-    #     else:
-    #         assert False
-    #
-    #     for opt in self.options.keys():
-    #         if opt not in self.used_options:
-    #             self.error("Unused option: {}".format(opt))
+        # def run(self, setupmode):
+        #     mode = None
+        #     key = None
+        #
+        #     with open("{}/config.sby".format(self.workdir), "r") as f:
+        #         for line in f:
+        #             raw_line = line
+        #             if mode in ["options", "engines", "files"]:
+        #                 line = re.sub(r"\s*(\s#.*)?$", "", line)
+        #                 if line == "" or line[0] == "#":
+        #                     continue
+        #             else:
+        #                 line = line.rstrip()
+        #             # print(line)
+        #             if mode is None and (len(line) == 0 or line[0] == "#"):
+        #                 continue
+        #             match = re.match(r"^\s*\[(.*)\]\s*$", line)
+        #             if match:
+        #                 entries = match.group(1).split()
+        #                 if len(entries) == 0:
+        #                     self.error("sby file syntax error: {}".format(line))
+        #
+        #                 if entries[0] == "options":
+        #                     mode = "options"
+        #                     if len(self.options) != 0 or len(entries) != 1:
+        #                         self.error("sby file syntax error: {}".format(line))
+        #                     continue
+        #
+        #                 if entries[0] == "engines":
+        #                     mode = "engines"
+        #                     if len(self.engines) != 0 or len(entries) != 1:
+        #                         self.error("sby file syntax error: {}".format(line))
+        #                     continue
+        #
+        #                 if entries[0] == "script":
+        #                     mode = "script"
+        #                     if len(self.script) != 0 or len(entries) != 1:
+        #                         self.error("sby file syntax error: {}".format(line))
+        #                     continue
+        #
+        #                 if entries[0] == "file":
+        #                     mode = "file"
+        #                     if len(entries) != 2:
+        #                         self.error("sby file syntax error: {}".format(line))
+        #                     current_verbatim_file = entries[1]
+        #                     if current_verbatim_file in self.verbatim_files:
+        #                         self.error("duplicate file: {}".format(entries[1]))
+        #                     self.verbatim_files[current_verbatim_file] = list()
+        #                     continue
+        #
+        #                 if entries[0] == "files":
+        #                     mode = "files"
+        #                     if len(entries) != 1:
+        #                         self.error("sby file syntax error: {}".format(line))
+        #                     continue
+        #
+        #                 self.error("sby file syntax error: {}".format(line))
+        #
+        #             if mode == "options":
+        #                 entries = line.split()
+        #                 if len(entries) != 2:
+        #                     self.error("sby file syntax error: {}".format(line))
+        #                 self.options[entries[0]] = entries[1]
+        #                 continue
+        #
+        #             if mode == "engines":
+        #                 entries = line.split()
+        #                 self.engines.append(entries)
+        #                 continue
+        #
+        #             if mode == "script":
+        #                 self.script.append(line)
+        #                 continue
+        #
+        #             if mode == "files":
+        #                 entries = line.split()
+        #                 if len(entries) == 1:
+        #                     self.files[os.path.basename(entries[0])] = entries[0]
+        #                 elif len(entries) == 2:
+        #                     self.files[entries[0]] = entries[1]
+        #                 else:
+        #                     self.error("sby file syntax error: {}".format(line))
+        #                 continue
+        #
+        #             if mode == "file":
+        #                 self.verbatim_files[current_verbatim_file].append(raw_line)
+        #                 continue
+        #
+        #             self.error("sby file syntax error: {}".format(line))
+        #
+        #     self.handle_str_option("mode", None)
+        #
+        #     if self.opt_mode not in ["bmc", "prove", "cover", "live"]:
+        #         self.error("Invalid mode: {}".format(self.opt_mode))
+        #
+        #     self.expect = ["PASS"]
+        #     if "expect" in self.options:
+        #         self.expect = self.options["expect"].upper().split(",")
+        #         self.used_options.add("expect")
+        #
+        #     for s in self.expect:
+        #         if s not in ["PASS", "FAIL", "UNKNOWN", "ERROR", "TIMEOUT"]:
+        #             self.error("Invalid expect value: {}".format(s))
+        #
+        #     self.handle_bool_option("multiclock", False)
+        #     self.handle_bool_option("wait", False)
+        #     self.handle_int_option("timeout", None)
+        #
+        #     self.handle_str_option("smtc", None)
+        #     self.handle_int_option("skip", None)
+        #     self.handle_str_option("tbtop", None)
+        #
+        #     if self.opt_smtc is not None:
+        #         for engine in self.engines:
+        #             if engine[0] != "smtbmc":
+        #                 self.error("Option smtc is only valid for smtbmc engine.")
+        #
+        #     if self.opt_skip is not None:
+        #         if self.opt_skip == 0:
+        #             self.opt_skip = None
+        #         else:
+        #             for engine in self.engines:
+        #                 if engine[0] not in ["smtbmc", "btor"]:
+        #                     self.error("Option skip is only valid for smtbmc and btor engines.")
+        #
+        #     if len(self.engines) == 0:
+        #         self.error("Config file is lacking engine configuration.")
+        #
+        #     if self.reusedir:
+        #         rmtree("{}/model".format(self.workdir), ignore_errors=True)
+        #     else:
+        #         self.copy_src()
+        #
+        #     if setupmode:
+        #         self.retcode = 0
+        #         return
+        #
+        #     if self.opt_mode == "bmc":
+        #         import sby_mode_bmc
+        #         sby_mode_bmc.run(self)
+        #
+        #     elif self.opt_mode == "prove":
+        #         import sby_mode_prove
+        #         sby_mode_prove.run(self)
+        #
+        #     elif self.opt_mode == "live":
+        #         import sby_mode_live
+        #         sby_mode_live.run(self)
+        #
+        #     elif self.opt_mode == "cover":
+        #         import sby_mode_cover
+        #         sby_mode_cover.run(self)
+        #
+        #     else:
+        #         assert False
+        #
+        #     for opt in self.options.keys():
+        #         if opt not in self.used_options:
+        #             self.error("Unused option: {}".format(opt))
 
         self.taskloop()
 
@@ -674,20 +722,34 @@ class EqyJob:
 
         if os.name == "posix":
             ru = resource.getrusage(resource.RUSAGE_CHILDREN)
-            total_process_time = int((ru.ru_utime + ru.ru_stime) - self.start_process_time)
+            total_process_time = int(
+                (ru.ru_utime + ru.ru_stime) - self.start_process_time
+            )
             self.total_time = total_process_time
 
             self.summary = [
-                "Elapsed clock time [H:MM:SS (secs)]: {}:{:02d}:{:02d} ({})".format
-                        (total_clock_time // (60*60), (total_clock_time // 60) % 60, total_clock_time % 60, total_clock_time),
-                "Elapsed process time [H:MM:SS (secs)]: {}:{:02d}:{:02d} ({})".format
-                        (total_process_time // (60*60), (total_process_time // 60) % 60, total_process_time % 60, total_process_time),
+                "Elapsed clock time [H:MM:SS (secs)]: {}:{:02d}:{:02d} ({})".format(
+                    total_clock_time // (60 * 60),
+                    (total_clock_time // 60) % 60,
+                    total_clock_time % 60,
+                    total_clock_time,
+                ),
+                "Elapsed process time [H:MM:SS (secs)]: {}:{:02d}:{:02d} ({})".format(
+                    total_process_time // (60 * 60),
+                    (total_process_time // 60) % 60,
+                    total_process_time % 60,
+                    total_process_time,
+                ),
             ] + self.summary
-        else: # pragma: no cover
+        else:  # pragma: no cover
             self.summary = [
-                "Elapsed clock time [H:MM:SS (secs)]: {}:{:02d}:{:02d} ({})".format
-                        (total_clock_time // (60*60), (total_clock_time // 60) % 60, total_clock_time % 60, total_clock_time),
-                "Elapsed process time unvailable on Windows"
+                "Elapsed clock time [H:MM:SS (secs)]: {}:{:02d}:{:02d} ({})".format(
+                    total_clock_time // (60 * 60),
+                    (total_clock_time // 60) % 60,
+                    total_clock_time % 60,
+                    total_clock_time,
+                ),
+                "Elapsed process time unvailable on Windows",
             ] + self.summary
 
         for line in self.summary:
@@ -698,11 +760,16 @@ class EqyJob:
         if self.status in self.expect:
             self.retcode = 0
         else:
-            if self.status == "PASS": self.retcode = 1
-            if self.status == "FAIL": self.retcode = 2
-            if self.status == "UNKNOWN": self.retcode = 4
-            if self.status == "TIMEOUT": self.retcode = 8
-            if self.status == "ERROR": self.retcode = 16
+            if self.status == "PASS":
+                self.retcode = 1
+            if self.status == "FAIL":
+                self.retcode = 2
+            if self.status == "UNKNOWN":
+                self.retcode = 4
+            if self.status == "TIMEOUT":
+                self.retcode = 8
+            if self.status == "ERROR":
+                self.retcode = 16
 
         with open("{}/{}".format(self.workdir, self.status), "w") as f:
             for line in self.summary:
