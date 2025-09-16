@@ -37,7 +37,7 @@ src/eqy_partition.so: src/eqy_partition.cc
 src/eqy_recode.so: src/eqy_recode.cc
 	$(YOSYS_CONFIG) --build $@ $(DEBUG_CXXFLAGS) $^ $(YOSYS_CFGFLAGS)
 
-install: src/eqy_combine.so src/eqy_partition.so src/eqy_recode.so
+build: src/eqy_combine.so src/eqy_partition.so src/eqy_recode.so
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
 	mkdir -p $(DESTDIR)$(PREFIX)/share/yosys/python3
 	mkdir -p $(DESTDIR)$(PREFIX)/share/yosys/plugins
@@ -55,6 +55,12 @@ else
 		-e "s|##yosys-release-version##|release_version = '$(YOSYS_RELEASE_VERSION)'|;" < src/eqy.py > $(DESTDIR)$(PREFIX)/bin/eqy
 	chmod +x $(DESTDIR)$(PREFIX)/bin/eqy
 endif
+
+install: build
+	mkdir -p $(DESTDIR)($PREFIX)/bin
+	mkdir -p $(DESTDIR)$(PREFIX)/share/yosys/python3
+	mkdir -p $(DESTDIR)$(PREFIX)/share/yosys/plugins
+	cp -r build/* $(DESTDIR)$(PREFIX)/
 
 html:
 	$(MAKE) -C docs html
