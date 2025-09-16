@@ -57,10 +57,7 @@ else
 endif
 
 install: build
-	mkdir -p $(DESTDIR)$(PREFIX)/bin
-	mkdir -p $(DESTDIR)$(PREFIX)/share/yosys/python3
-	mkdir -p $(DESTDIR)$(PREFIX)/share/yosys/plugins
-	cp -r build/* $(DESTDIR)$(PREFIX)/
+	@:
 
 html:
 	$(MAKE) -C docs html
