@@ -12,10 +12,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       
       - name: Install OSS-Cad-Suite
-        uses: YosysHQ/setup-oss-cad-suite@v3
+        uses: YosysHQ/setup-oss-cad-suite@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -36,10 +36,10 @@ jobs:
     runs-on: [self-hosted, linux, x64, fast]
     steps:
       - name: Checkout EQY
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout Yosys
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: 'YosysHQ/yosys'
           path: 'yosys'
@@ -48,24 +48,24 @@ jobs:
       - name: Runtime environment
         run: |
           echo "procs=$(nproc)" >> $GITHUB_ENV
+          rm -rf .local
 
       - name: Build Yosys
         run: |
           cd yosys
-          make config-clang
-          echo "ENABLE_VERIFIC := 1" >> Makefile.conf
-          echo "ENABLE_VERIFIC_EDIF := 1" >> Makefile.conf
-          echo "ENABLE_VERIFIC_LIBERTY := 1" >> Makefile.conf
-          echo "ENABLE_VERIFIC_YOSYSHQ_EXTENSIONS := 1" >> Makefile.conf
-          echo "ENABLE_CCACHE := 1" >> Makefile.conf
-          make -j${{ env.procs }}
-          make install DESTDIR=${GITHUB_WORKSPACE}/.local PREFIX=
-          sed -i 's,/usr/local/share,${GITHUB_WORKSPACE}/.local/share,g' ${GITHUB_WORKSPACE}/.local/bin/yosys-config
-          sed -i 's,/usr/local/include,${GITHUB_WORKSPACE}/.local/include,g' ${GITHUB_WORKSPACE}/.local/bin/yosys-config
-          sed -i 's,/usr/local/lib,${GITHUB_WORKSPACE}/.local/lib,g' ${GITHUB_WORKSPACE}/.local/bin/yosys-config
+          rm -rf build Configuration.cmake
+          echo 'set(CMAKE_C_COMPILER clang CACHE STRING "")' >> Configuration.cmake
+          echo 'set(CMAKE_CXX_COMPILER clang++ CACHE STRING "")' >> Configuration.cmake
+          echo 'set(YOSYS_COMPILER_LAUNCHER ccache CACHE STRING "")' >> Configuration.cmake
+          echo 'set(YOSYS_VERIFIC_DIR "/usr/local/src/verific_lib" CACHE STRING "")' >> Configuration.cmake
+
+          cmake -C Configuration.cmake -B build . -DCMAKE_INSTALL_PREFIX=${GITHUB_WORKSPACE}/.local -DCMAKE_BUILD_TYPE=Debug
+
+          cmake --build build -j${{ env.procs }}
+          cmake --build build --target install
 
       - name: Checkout SBY
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: 'YosysHQ/sby'
           path: 'sby'
@@ -75,20 +75,10 @@ jobs:
           make -C sby install DESTDIR=${GITHUB_WORKSPACE}/.local PREFIX=
 
       - name: EQY Coverage
-        if: (github.event_name != 'schedule')
         run: |
-          sed -i 's,clang,g,g' ${GITHUB_WORKSPACE}/.local/bin/yosys-config
-          sed -i 's,--gcov-tool $$PWD/llvm-gcov.sh,,g' Makefile
-          sed -i "s,--no-external,--no-external --exclude '*/.local/share/*',g" Makefile
-          make COVERAGE=1
+          make install DESTDIR=${GITHUB_WORKSPACE}/.local PREFIX= COVERAGE=1
           make coverage
-          lcov_cobertura coverage.info --excludes .local.share --demangle
-
-      - name: EQY Tests
-        if: (github.event_name == 'schedule')
-        run: |
-          make
-          make test EQY="python3 $(pwd)/src/eqy.py"
+          lcov_cobertura coverage.info --demangle
 
       - name: Report
         if: (github.event_name != 'schedule')
